@@ -1,10 +1,9 @@
 DATA:
   HE_FEATURE_ROOT: 'xxx/xxx/xx/TCGA-LUNG-Feature-Path'
   IHC_FEATURE_ROOT: 'xxx/xxx/xx/TCGA-LUNG-Feature-Path'
-  HE_TRAIN_VALID_CSV: './data/TCGA-LUNG/TCGA_LUNG_trainval.csv'
-  IHC_TRAIN_VALID_CSV: './data/TCGA-LUNG/TCGA_LUNG_trainval.csv'
-  HE_TEST_CSV: './data/TCGA-LUNG/TCGA_LUNG_test.csv'
-  IHC_TEST_CSV: './data/TCGA-LUNG/TCGA_LUNG_test.csv'
+  TRAIN_VALID_CSV: './data/TCGA-LUNG/TCGA_LUNG_trainval.csv'
+  TEST_CSV: './data/TCGA-LUNG/TCGA_LUNG_test.csv'
+
 
 MODEL:
   FEATURE_DIM: 512

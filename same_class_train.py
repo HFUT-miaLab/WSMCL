@@ -171,7 +171,7 @@ def train(args, model, train_loader, valid_loader):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WSMCL script")
-    parser.add_argument('--cfg', type=str, default="./configs/WSMCL_config.yaml")
+    parser.add_argument('--cfg', type=str, default="./configs/WSMCL_same_class_config.yaml")
 
     args = parser.parse_args()
 
