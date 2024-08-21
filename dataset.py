@@ -1,5 +1,6 @@
 import os
 import random
+import math
 
 import numpy as np
 import torch
@@ -7,20 +8,43 @@ import torch.utils.data as data
 
 
 # multi-modal same-class pairing strategy
-def MSCP(he_data_list, ihc_data_list):
-    return []
+def MSCP(he_data_list, ihc_data_list, num_classes):
+
+    D_mm = []
+    M = len(he_data_list) # or len(ihc_data_list)
+    D_y = []
+
+    for i in range(num_classes):
+        sub_y_list = [i]*math.floor(M/num_classes)
+        D_y = D_y + sub_y_list
+
+    he_data_set = []*num_classes
+    ihc_data_set = []*num_classes
+    for he_id,he_y in he_data_list:
+        he_data_set[he_y].append(he_id)
+    for ihc_id,ihc_y in ihc_data_list:
+        ihc_data_set[ihc_y].append(ihc_id)
+    for i in range(math.floor(M/num_classes)*num_classes):
+        y = D_y[i]
+        random.shuffle(he_data_set[y])
+        random.shuffle(ihc_data_set[y])
+        he_id, ihc_id = he_data_set[0],ihc_data_set[0]
+        D_mm.append((he_id,ihc_id,y))
+
+    return D_mm
 
 
 
 
 class TrainDataset(data.Dataset):
-    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, mscp, fold_k, sample_num=None):
+    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, mscp, fold_k, sample_num=None, num_classes=4):
         super(TrainDataset, self).__init__()
         self.he_feature_path = he_feature_path
         self.ihc_feature_path = ihc_feature_path
         self.mscp = mscp
         self.fold_k = fold_k
         self.sample_num = sample_num
+        self.num_classes = num_classes
         self.he_data_list = []
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
@@ -40,7 +64,7 @@ class TrainDataset(data.Dataset):
         if not mscp:
             self.data_list = self.he_data_list # or self.ihc_data_list
         else:
-            self.data_list = MSCP(self.he_data_list,self.ihc_data_list)
+            self.data_list = MSCP(self.he_data_list,self.ihc_data_list, self.num_classes)
 
     def __getitem__(self, index: int):
         he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
@@ -65,12 +89,13 @@ class TrainDataset(data.Dataset):
         return len(self.data_list)
 
 class ValDataset(data.Dataset):
-    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, val_mode, fold_k):
+    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, val_mode, fold_k, num_classes=4):
         super(ValDataset, self).__init__()
         self.he_feature_path = he_feature_path
         self.ihc_feature_path = ihc_feature_path
         self.val_mode = val_mode
         self.fold_k = fold_k
+        self.num_classes = num_classes
         self.he_data_list = []
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
@@ -92,7 +117,7 @@ class ValDataset(data.Dataset):
         elif self.val_mode == 'ihc':
             self.data_list = self.ihc_data_list  # or self.ihc_data_list
         elif self.val_mode == 'mm': # multi-modal
-            self.data_list = MSCP(self.he_data_list,self.ihc_data_list)
+            self.data_list = MSCP(self.he_data_list, self.ihc_data_list, self.num_classes)
         else:
             raise Exception("Invalid value for val mode!")
 
@@ -118,11 +143,12 @@ class ValDataset(data.Dataset):
         return len(self.data_list)
 
 class TestDataset(data.Dataset):
-    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, test_mode):
+    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, test_mode, num_classes=4):
         super(TestDataset, self).__init__()
         self.he_feature_path = he_feature_path
         self.ihc_feature_path = ihc_feature_path
         self.test_mode = test_mode
+        self.num_classes = num_classes
         self.he_data_list = []
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
@@ -140,7 +166,7 @@ class TestDataset(data.Dataset):
         elif self.test_mode == 'ihc':
             self.data_list = self.ihc_data_list  # or self.ihc_data_list
         elif self.test_mode == 'mm': # multi-modal
-            self.data_list = MSCP(self.he_data_list,self.ihc_data_list)
+            self.data_list = MSCP(self.he_data_list,self.ihc_data_list, self.num_classes)
         else:
             raise Exception("Invalid value for test mode!")
 

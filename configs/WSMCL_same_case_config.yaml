@@ -1,19 +1,20 @@
 DATA:
-  HE_FEATURE_ROOT: 'xxx/xxx/xx/TCGA-LUNG-Feature-Path'
-  IHC_FEATURE_ROOT: 'xxx/xxx/xx/TCGA-LUNG-Feature-Path'
-  TRAIN_VALID_CSV: './data/TCGA-LUNG/TCGA_LUNG_trainval.csv'
-  TEST_CSV: './data/TCGA-LUNG/TCGA_LUNG_test.csv'
-
+  HE_FEATURE_ROOT: 'xxx/xxx/xx/USTC_BCHER2_FEATURE'
+  IHC_FEATURE_ROOT: 'xxx/xxx/xx/USTC_BCHER2_FEATURE'
+  HE_TRAIN_VALID_CSV: './data/USTC_BCHER2_trainval.csv'
+  IHC_TRAIN_VALID_CSV: './data/USTC_BCHER2_trainval.csv'
+  HE_TEST_CSV: './data/USTC_BCHER2_test.csv'
+  IHC_TEST_CSV: './data/USTC_BCHER2_test.csv'
 
 MODEL:
   FEATURE_DIM: 512
-  NUM_CLASS: 4
+  NUM_CLASSES: 4
   SELECT_K: 100
   KL_WEIGHT: 1
   RETURN_ATTE: False
 
 TRAIN:
-  IS_SAME_CASE: True
+  MSCP: False
   MAX_EPOCH: 100
   BATCH_SIZE: 1
   WORKERS: 12

@@ -65,13 +65,13 @@ def merge_config_to_args(args, cfg):
 
     # Model
     args.feat_dim = cfg.MODEL.FEATURE_DIM
-    args.num_class = cfg.MODEL.NUM_CLASS
+    args.num_classes = cfg.MODEL.NUM_CLASSES
     args.select_k = cfg.MODEL.SELECT_K
     args.kl_weight = cfg.MODEL.KL_WEIGHT
     args.return_atte = cfg.MODEL.RETURN_ATTE
 
     # TRAIN
-    args.is_same_case = cfg.TRAIN.IS_SAME_CASE
+    args.mscp = cfg.TRAIN.MSCP
     args.batch_size = cfg.TRAIN.BATCH_SIZE
     args.workers = cfg.TRAIN.WORKERS
     args.lr = cfg.TRAIN.LR

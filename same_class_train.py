@@ -1,5 +1,6 @@
 # STL
 import os
+import gc
 import copy
 import sys
 import argparse
@@ -10,7 +11,7 @@ import shutil
 from yacs.config import CfgNode
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
 
@@ -21,11 +22,11 @@ from utils.utils import merge_config_to_args, Logger, fix_random_seeds, BestMode
 import utils.metric as metric
 
 
-
 def init_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
+
 
 def model_eval(args, test_loader, model):
     model.eval()
@@ -80,7 +81,7 @@ def valid(args, valid_loader, model):
     pred_probs = []
     y_preds = []
     with torch.no_grad():
-        for step, (he_feat, ihc_feat, target) in enumerate(val_loader):
+        for step, (he_feat, ihc_feat, target) in enumerate(valid_loader):
             he_feat = he_feat.to(args.device)
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
@@ -108,8 +109,7 @@ def valid(args, valid_loader, model):
     return acc, auc_score, macro_f1
 
 
-def train(args, model, train_loader, valid_loader):
-
+def train(args, model, train_loader, valid_loader, scaler):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     loss_fn = torch.nn.CrossEntropyLoss()
     loss_fn.to(args.device)
@@ -117,36 +117,40 @@ def train(args, model, train_loader, valid_loader):
     best_model_saver = BestModelSaver()
 
     for epoch in range(args.max_epoch):
-
-        correct, total = 0, 0
-
+        NUM_STEP = 5
         model.train()
-
+        optimizer.zero_grad(set_to_none=True)
         for step, (he_feat, ihc_feat, target) in enumerate(train_loader):
-            optimizer.zero_grad()
             he_feat = he_feat.to(args.device)
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
 
-            result = model(he_feat, ihc_feat)
-            bag_pred = torch.argmax(result['Y_prob'].squeeze(0), 1)
-            correct += int((bag_pred == target).sum().cpu())
-            total = total + len(target)
+            with torch.cuda.amp.autocast():
+                result = model(he_feat, ihc_feat)
 
-            bag_loss = loss_fn(result['MM_logit'].squeeze(0), target[0])
-            # Reconstruction Loss
-            reconstruction_loss = result['pos_loss']
-            # Total Loss
-            total_loss = args.loss_weight * bag_loss + (1 - args.loss_weight) * reconstruction_loss
+                loss_ihc = loss_fn(result['IHC_logit'], target[0])
+                loss_MM = loss_fn(result['MM_logit']
+                                  , target[0])
+                loss_c = result['c_loss']
+                KL_loss_HE = F.kl_div(result['HE_logit'].softmax(dim=-1).log(),
+                                      result['IHC_logit'].softmax(dim=-1), reduction='batchmean')
+                total_loss = loss_MM + loss_ihc + loss_c + args.kl_weight * KL_loss_HE
+                total_loss /= NUM_STEP
 
-            total_loss.backward()
-            optimizer.step()
+            scaler.scale(total_loss).backward()
 
-            print("\rEpoch: [{:d}/{:d}] || epoch: [{:d}/{:d}] || Bag_Loss: {:.6f} ||"
-                  " Reconstruction_Loss: {:.6f} || Total_Loss: {:.6f}"
-                  .format(args.current_epoch + 1, args.max_epoch, step + 1, len(train_loader),
-                          bag_loss.item(), reconstruction_loss.item(),
-                          total_loss), end="")
+            if ((step + 1) % NUM_STEP == 0) or (step + 1 == len(train_loader)):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
+
+            torch.cuda.empty_cache()
+            _ = gc.collect()
+
+            print("\rEpoch:{:d} train batch {:d}:{:d} KL_loss={:.3f} loss_ce_IHC={:.3f} loss_MM:{:.3f} "
+                  "c_loss={:.3f}".format(
+                epoch + 1, step + 1, len(train_loader),
+                KL_loss_HE.item(), loss_ihc.item(), loss_MM.item(), loss_c.item()), end="")
         print()
 
         valid_acc, valid_auc, valid_f1 = valid(args, valid_loader, model)
@@ -202,35 +206,49 @@ if __name__ == "__main__":
     fix_random_seeds()
     for fold in range(5):
         # Model init
+
         model = WSMCL(input_dim=args.feat_dim,
-                      n_classes=args.num_class,
+                      n_classes=args.num_classes,
                       k=args.select_k,
                       return_atte=args.return_atte
-        )
+                      )
         if torch.cuda.is_available():
             args.device = torch.device('cuda:0')
             model = model.to(args.device)
         print("\tWSMCL feat_dim:{} n_classes:{} select_k:{} return_atte:{} kl_weight:{}"
               .format(args.feat_dim,
-                            args.num_class,
-                            args.select_k,
-                            args.return_atte,
-                            args.KL_WEIGHT))
+                      args.num_classes,
+                      args.select_k,
+                      args.return_atte,
+                      args.KL_WEIGHT))
 
-        args.fold_save_path = os.path.join(args.weights_save_path, 'fold' + str(fold+1))
+        args.fold_save_path = os.path.join(args.weights_save_path, 'fold' + str(fold + 1))
         os.makedirs(args.fold_save_path, exist_ok=True)
 
-        print('Training Folder: {}.\n\tData Loading...'.format(fold+1))
-        train_dataset = TrainDataset(path=args.he_feature_root, data_csv=args.train_valid_csv,
-                                        fold_k=fold, mode='train', sample_num=None)
-        valid_dataset = ValDataset(path=args.feature_root, data_csv=args.train_valid_csv,
-                                        fold_k=fold, mode='val')
+        print('Training Folder: {}.\n\tData Loading...'.format(fold + 1))
+        train_dataset = TrainDataset(he_feature_path=args.he_feature_root,
+                                     ihc_feature_path=args.ihc_feature_root,
+                                     he_csv=args.he_train_valid_csv,
+                                     ihc_csv=args.ihc_train_valid_csv,
+                                     mscp=args.mscp,
+                                     fold_k=fold,
+                                     sample_num=None,
+                                     num_classes=args.num_classes)
+        valid_dataset = ValDataset(he_feature_path=args.he_feature_root,
+                                   ihc_feature_path=args.ihc_feature_root,
+                                   he_csv=args.he_train_valid_csv,
+                                   ihc_csv=args.ihc_train_valid_csv,
+                                   fold_k=fold,
+                                   val_mode='mm',
+                                   num_classes=args.num_classes)
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers,pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
         valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
                                   pin_memory=True)
 
-        best_model_saver = train(args, model, train_loader, valid_loader)
+        scaler = torch.cuda.amp.GradScaler()
+
+        best_model_saver = train(args, model, train_loader, valid_loader, scaler)
         print('\t(Valid)Best ACC: {:.6f} || Best Macro_AUC: {:.6f} || Best Macro_F1: {:.6f}'
               .format(best_model_saver.best_valid_acc, best_model_saver.best_valid_auc,
                       best_model_saver.best_valid_f1))
@@ -239,7 +257,12 @@ if __name__ == "__main__":
         val_macro_auc_5fold_model.append(best_model_saver.best_valid_auc)
         val_macro_f1_5fold_model.append(best_model_saver.best_valid_f1)
 
-        test_dataset = TestDataset(args.feature_root, args.test_csv)
+        test_dataset = TestDataset(he_feature_path=args.he_feature_root,
+                                   ihc_feature_path=args.ihc_feature_root,
+                                   he_csv=args.he_train_valid_csv,
+                                   ihc_csv=args.ihc_train_valid_csv,
+                                   test_mode='he',
+                                   num_classes=args.num_classes)
         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
                                  pin_memory=True)
 
