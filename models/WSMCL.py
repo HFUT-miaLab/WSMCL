@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat
-from transformer import TransLayer
+from models.transformer import TransLayer
 
 
 class TailFusion(nn.Module):

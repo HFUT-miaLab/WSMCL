@@ -1,5 +1,5 @@
 import torch.nn as nn
-from nystrom_attention import NystromAttention
+from models.nystrom_attention import NystromAttention
 
 
 class TransLayer(nn.Module):
@@ -26,4 +26,4 @@ class TransLayer(nn.Module):
         else:
             r = self.attn(self.norm(x),return_attn=False)
             x = x + r
-            return x
+            return None, x

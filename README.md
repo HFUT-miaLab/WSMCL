@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 ### Run
 ```shell
-python same_case_train.py
+python main.py
 ```
 
 

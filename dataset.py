@@ -127,10 +127,10 @@ class ValDataset(data.Dataset):
     def __getitem__(self, index: int):
         if self.val_mode == 'he':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
-            ihc_feature_data = None
+            ihc_feature_data = torch.tensor(0)
             label = torch.LongTensor([self.data_list[index][2]])
         elif self.val_mode == 'ihc':
-            he_feature_data = None
+            he_feature_data = torch.tensor(0)
             ihc_feature_data = torch.load(os.path.join(self.ihc_feature_path, self.data_list[index][1] + "_features.pth"))
             label = torch.LongTensor([self.data_list[index][2]])
         elif self.val_mode == 'mm':
@@ -176,10 +176,10 @@ class TestDataset(data.Dataset):
     def __getitem__(self, index: int):
         if self.test_mode == 'he':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
-            ihc_feature_data = None
+            ihc_feature_data = torch.tensor(0)
             label = torch.LongTensor([self.data_list[index][2]])
         elif self.test_mode == 'ihc':
-            he_feature_data = None
+            he_feature_data = torch.tensor(0)
             ihc_feature_data = torch.load(
                 os.path.join(self.ihc_feature_path, self.data_list[index][1] + "_features.pth"))
             label = torch.LongTensor([self.data_list[index][2]])
