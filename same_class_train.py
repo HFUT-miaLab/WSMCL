@@ -42,7 +42,7 @@ def model_eval(args, test_loader, model):
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
 
-            result = model(he_feat, ihc_feat)
+            result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
 
             y_probs = F.softmax(result['MM_logit'].squeeze(0), dim=1)
             y_pred = torch.argmax(result['MM_logit'].squeeze(0), 1)
@@ -86,7 +86,7 @@ def valid(args, valid_loader, model):
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
 
-            result = model(he_feat, ihc_feat)
+            result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
             y_probs = torch.softmax(result['MM_logit'].squeeze(0), dim=1)
             y_pred = torch.argmax(result['MM_logit'].squeeze(0), dim=1)
             y_preds += y_pred.cpu().tolist()
@@ -126,7 +126,7 @@ def train(args, model, train_loader, valid_loader, scaler):
             target = target.to(args.device)
 
             with torch.cuda.amp.autocast():
-                result = model(he_feat, ihc_feat)
+                result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
 
                 loss_ihc = loss_fn(result['IHC_logit'], target[0])
                 loss_MM = loss_fn(result['MM_logit']
@@ -220,7 +220,7 @@ if __name__ == "__main__":
                       args.num_classes,
                       args.select_k,
                       args.return_atte,
-                      args.KL_WEIGHT))
+                      args.kl_weight))
 
         args.fold_save_path = os.path.join(args.weights_save_path, 'fold' + str(fold + 1))
         os.makedirs(args.fold_save_path, exist_ok=True)

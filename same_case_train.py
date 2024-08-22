@@ -42,10 +42,10 @@ def model_eval(args, test_loader, model):
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
 
-            result = model(he_feat, ihc_feat)
+            result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
 
-            y_probs = F.softmax(result['MM_logit'].squeeze(0), dim=1)
-            y_pred = torch.argmax(result['MM_logit'].squeeze(0), 1)
+            y_probs = F.softmax(result['MM_logit'], dim=1)
+            y_pred = torch.argmax(result['MM_logit'], 1)
 
             y_result += target.cpu().tolist()
             pred_probs += y_probs.cpu().tolist()
@@ -56,13 +56,13 @@ def model_eval(args, test_loader, model):
 
     acc = (correct / total).cpu().data.numpy()
 
-    if args.num_class == 2:
+    if args.num_classes == 2:
         y_result = np.array(y_result)
         pred_probs = np.array(pred_probs)[:, 1]
-        macro_auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_class > 2)
+        macro_auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_classes > 2)
         macro_F1 = f1_score(y_true=y_result, y_pred=y_preds, average='macro')
     else:
-        macro_auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_class > 2)
+        macro_auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_classes > 2)
         macro_F1 = f1_score(y_true=y_result, y_pred=y_preds, average='macro')
 
     np.save(os.path.join(args.fold_save_path, 'target.npy'), np.array(y_result))
@@ -86,9 +86,9 @@ def valid(args, valid_loader, model):
             ihc_feat = ihc_feat.to(args.device)
             target = target.to(args.device)
 
-            result = model(he_feat, ihc_feat)
-            y_probs = torch.softmax(result['MM_logit'].squeeze(0), dim=1)
-            y_pred = torch.argmax(result['MM_logit'].squeeze(0), dim=1)
+            result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
+            y_probs = torch.softmax(result['MM_logit'], dim=1)
+            y_pred = torch.argmax(result['MM_logit'], dim=1)
             y_preds += y_pred.cpu().tolist()
             y_result += target.cpu().tolist()
             pred_probs += y_probs.cpu().tolist()
@@ -97,13 +97,13 @@ def valid(args, valid_loader, model):
             total += len(target)
 
     acc = (correct / total).cpu().detach().data.numpy()
-    if args.num_class == 2:
+    if args.num_classes == 2:
         y_result = np.array(y_result)
         pred_probs = np.array(pred_probs)[:, 1]
-        auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_class > 2)
+        auc_score = metric.macro_auc(y_result, y_score=pred_probs, multi_class=args.num_classes > 2)
         macro_f1 = f1_score(y_true=y_result, y_pred=y_preds, average='macro')
     else:
-        auc_score = metric.macro_auc(np.array(y_result), y_score=np.array(pred_probs), multi_class=args.num_class > 2)
+        auc_score = metric.macro_auc(np.array(y_result), y_score=np.array(pred_probs), multi_class=args.num_classes > 2)
         macro_f1 = f1_score(y_true=np.array(y_result), y_pred=np.array(y_preds), average='macro')
 
     return acc, auc_score, macro_f1
@@ -127,7 +127,7 @@ def train(args, model, train_loader, valid_loader, scaler):
             target = target.to(args.device)
 
             with torch.cuda.amp.autocast():
-                result = model(he_feat, ihc_feat)
+                result = model(he_feat.squeeze(0), ihc_feat.squeeze(0))
 
                 loss_ihc = loss_fn(result['IHC_logit'], target[0])
                 loss_MM = loss_fn(result['MM_logit']
@@ -221,7 +221,7 @@ if __name__ == "__main__":
                             args.num_classes,
                             args.select_k,
                             args.return_atte,
-                            args.KL_WEIGHT))
+                            args.kl_weight))
 
         args.fold_save_path = os.path.join(args.weights_save_path, 'fold' + str(fold+1))
         os.makedirs(args.fold_save_path, exist_ok=True)
@@ -241,6 +241,7 @@ if __name__ == "__main__":
                                      ihc_csv=args.ihc_train_valid_csv,
                                      fold_k=fold,
                                      val_mode='he',
+                                     mscp=args.mscp,
                                      num_classes=args.num_classes)
 
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers,pin_memory=True)
@@ -260,9 +261,10 @@ if __name__ == "__main__":
 
         test_dataset = TestDataset(he_feature_path=args.he_feature_root,
                                      ihc_feature_path=args.ihc_feature_root,
-                                     he_csv=args.he_train_valid_csv,
-                                     ihc_csv=args.ihc_train_valid_csv,
+                                     he_csv=args.he_test_csv,
+                                     ihc_csv=args.ihc_test_csv,
                                      test_mode='mm',
+                                     mscp=args.mscp,
                                      num_classes=args.num_classes)
         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
                                  pin_memory=True)

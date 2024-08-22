@@ -18,8 +18,8 @@ def MSCP(he_data_list, ihc_data_list, num_classes):
         sub_y_list = [i]*math.floor(M/num_classes)
         D_y = D_y + sub_y_list
 
-    he_data_set = []*num_classes
-    ihc_data_set = []*num_classes
+    he_data_set = [[] for _ in range(num_classes)]
+    ihc_data_set = [[] for _ in range(num_classes)]
     for he_id,he_y in he_data_list:
         he_data_set[he_y].append(he_id)
     for ihc_id,ihc_y in ihc_data_list:
@@ -28,9 +28,8 @@ def MSCP(he_data_list, ihc_data_list, num_classes):
         y = D_y[i]
         random.shuffle(he_data_set[y])
         random.shuffle(ihc_data_set[y])
-        he_id, ihc_id = he_data_set[0],ihc_data_set[0]
+        he_id, ihc_id = he_data_set[y][0],ihc_data_set[y][0]
         D_mm.append((he_id,ihc_id,y))
-
     return D_mm
 
 
@@ -49,18 +48,18 @@ class TrainDataset(data.Dataset):
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[1].strip())
                 fold = int(i.split(',')[-1].strip())
                 if fold != self.fold_k:
-                    self.he_data_list.append((slide_feature_path, slide_label))
+                    self.he_data_list.append((slide_id, slide_id, slide_label))
         with open(ihc_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[1].strip())
                 fold = int(i.split(',')[-1].strip())
                 if fold != self.fold_k:
-                    self.ihc_data_list.append((slide_feature_path, slide_label))
+                    self.ihc_data_list.append((slide_id, slide_id, slide_label))
         if not mscp:
             self.data_list = self.he_data_list # or self.ihc_data_list
         else:
@@ -89,35 +88,38 @@ class TrainDataset(data.Dataset):
         return len(self.data_list)
 
 class ValDataset(data.Dataset):
-    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, val_mode, fold_k, num_classes=4):
+    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, val_mode, fold_k, mscp, num_classes=4):
         super(ValDataset, self).__init__()
         self.he_feature_path = he_feature_path
         self.ihc_feature_path = ihc_feature_path
         self.val_mode = val_mode
         self.fold_k = fold_k
+        self.mscp = mscp
         self.num_classes = num_classes
         self.he_data_list = []
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[1].strip())
                 fold = int(i.split(',')[-1].strip())
                 if fold == self.fold_k:
-                    self.he_data_list.append((slide_feature_path, slide_label))
+                    self.he_data_list.append((slide_id, slide_id, slide_label))
         with open(ihc_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[1].strip())
                 fold = int(i.split(',')[-1].strip())
                 if fold == self.fold_k:
-                    self.ihc_data_list.append((slide_feature_path, slide_label))
+                    self.ihc_data_list.append((slide_id, slide_id, slide_label))
         if self.val_mode == 'he':
-            self.data_list = self.he_data_list # or self.ihc_data_list
+            self.data_list = self.he_data_list
         elif self.val_mode == 'ihc':
-            self.data_list = self.ihc_data_list  # or self.ihc_data_list
-        elif self.val_mode == 'mm': # multi-modal
+            self.data_list = self.ihc_data_list
+        elif self.val_mode == 'mm' and self.mscp: # multi-modal
             self.data_list = MSCP(self.he_data_list, self.ihc_data_list, self.num_classes)
+        elif self.val_mode == 'mm' and not self.mscp: # multi-modal
+            self.data_list = self.he_data_list # or self.ihc_data_list
         else:
             raise Exception("Invalid value for val mode!")
 
@@ -126,11 +128,11 @@ class ValDataset(data.Dataset):
         if self.val_mode == 'he':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
             ihc_feature_data = None
-            label = torch.LongTensor([self.data_list[index][1]])
+            label = torch.LongTensor([self.data_list[index][2]])
         elif self.val_mode == 'ihc':
             he_feature_data = None
             ihc_feature_data = torch.load(os.path.join(self.ihc_feature_path, self.data_list[index][1] + "_features.pth"))
-            label = torch.LongTensor([self.data_list[index][1]])
+            label = torch.LongTensor([self.data_list[index][2]])
         elif self.val_mode == 'mm':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
             ihc_feature_data = torch.load(os.path.join(self.ihc_feature_path, self.data_list[index][1] + "_features.pth"))
@@ -143,30 +145,31 @@ class ValDataset(data.Dataset):
         return len(self.data_list)
 
 class TestDataset(data.Dataset):
-    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, test_mode, num_classes=4):
+    def __init__(self, he_feature_path, ihc_feature_path, he_csv, ihc_csv, test_mode, mscp, num_classes=4):
         super(TestDataset, self).__init__()
         self.he_feature_path = he_feature_path
         self.ihc_feature_path = ihc_feature_path
         self.test_mode = test_mode
+        self.mscp = mscp
         self.num_classes = num_classes
         self.he_data_list = []
         self.ihc_data_list = []
         with open(he_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[-1].strip())
-                self.he_data_list.append((slide_feature_path, slide_label))
+                self.he_data_list.append((slide_id, slide_id, slide_label))
         with open(ihc_csv, 'r') as f:
             for i in f.readlines():
-                slide_feature_path = i.split(',')[0]
+                slide_id = i.split(',')[0]
                 slide_label = int(i.split(',')[-1].strip())
-                self.ihc_data_list.append((slide_feature_path, slide_label))
+                self.ihc_data_list.append((slide_id, slide_id, slide_label))
         if self.test_mode == 'he':
-            self.data_list = self.he_data_list # or self.ihc_data_list
+            self.data_list = self.he_data_list
         elif self.test_mode == 'ihc':
-            self.data_list = self.ihc_data_list  # or self.ihc_data_list
-        elif self.test_mode == 'mm': # multi-modal
-            self.data_list = MSCP(self.he_data_list,self.ihc_data_list, self.num_classes)
+            self.data_list = self.ihc_data_list
+        elif self.test_mode == 'mm' and not mscp: # multi-modal
+            self.data_list = self.he_data_list # or self.ihc_data_list
         else:
             raise Exception("Invalid value for test mode!")
 
@@ -174,12 +177,12 @@ class TestDataset(data.Dataset):
         if self.test_mode == 'he':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
             ihc_feature_data = None
-            label = torch.LongTensor([self.data_list[index][1]])
+            label = torch.LongTensor([self.data_list[index][2]])
         elif self.test_mode == 'ihc':
             he_feature_data = None
             ihc_feature_data = torch.load(
                 os.path.join(self.ihc_feature_path, self.data_list[index][1] + "_features.pth"))
-            label = torch.LongTensor([self.data_list[index][1]])
+            label = torch.LongTensor([self.data_list[index][2]])
         elif self.test_mode == 'mm':
             he_feature_data = torch.load(os.path.join(self.he_feature_path, self.data_list[index][0] + "_features.pth"))
             ihc_feature_data = torch.load(
