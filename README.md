@@ -47,4 +47,14 @@ python main.py
 
 
 ### Citation
-....
+@article{SHI2025102502,
+title = {Weakly supervised multi-modal contrastive learning framework for predicting the HER2 scores in breast cancer},
+journal = {Computerized Medical Imaging and Graphics},
+volume = {121},
+pages = {102502},
+year = {2025},
+issn = {0895-6111},
+doi = {https://doi.org/10.1016/j.compmedimag.2025.102502},
+url = {https://www.sciencedirect.com/science/article/pii/S0895611125000114},
+author = {Jun Shi and Dongdong Sun and Zhiguo Jiang and Jun Du and Wei Wang and Yushan Zheng and Haibo Wu},
+}
