@@ -47,6 +47,7 @@ python main.py
 
 
 ### Citation
+```
 @article{SHI2025102502,
 title = {Weakly supervised multi-modal contrastive learning framework for predicting the HER2 scores in breast cancer},
 journal = {Computerized Medical Imaging and Graphics},
@@ -58,3 +59,10 @@ doi = {https://doi.org/10.1016/j.compmedimag.2025.102502},
 url = {https://www.sciencedirect.com/science/article/pii/S0895611125000114},
 author = {Jun Shi and Dongdong Sun and Zhiguo Jiang and Jun Du and Wei Wang and Yushan Zheng and Haibo Wu},
 }
+```
+
+or
+
+```
+Shi, Jun, et al. "Weakly supervised multi-modal contrastive learning framework for predicting the HER2 scores in breast cancer." Computerized Medical Imaging and Graphics (2025): 102502.
+```
